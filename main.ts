@@ -50,6 +50,13 @@ function assertValid(line: string): number {
   if (/[\u0000-\u001f\u007f]/.test(line)) {
     throw new Error("line must not contain control characters");
   }
+  // No invisible formatting characters: zero-width space/joiner/non-joiner,
+  // byte-order mark, word joiner, mongolian vowel separator, and soft hyphen
+  // are invisible in the rendered line but would still count toward the
+  // judged text, so a line containing them is not what it looks like.
+  if (/[\u00ad\u180e\u200b-\u200d\u2060\ufeff]/.test(line)) {
+    throw new Error("line must not contain invisible formatting characters");
+  }
   return count;
 }
 
@@ -73,6 +80,15 @@ function assertDeterministic(line: string): void {
     }
     if (bytesA.toString("utf8") !== line) {
       throw new Error("determinism check failed: bytes do not match the line");
+    }
+    // The byte length must match the line's UTF-8 encoding exactly: a
+    // multi-byte character silently mangled into replacement bytes would
+    // still round-trip as a string of the same length in some cases, so
+    // compare the raw byte count against Buffer.byteLength as well.
+    if (bytesA.length !== Buffer.byteLength(line, "utf8")) {
+      throw new Error(
+        `determinism check failed: byte length ${bytesA.length} does not match UTF-8 byte length ${Buffer.byteLength(line, "utf8")}`,
+      );
     }
   } finally {
     rmSync(first, { recursive: true, force: true });
